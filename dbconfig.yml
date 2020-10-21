@@ -1,0 +1,5 @@
+development:
+  dialect: postgres
+  datasource: host=localhost port=5432 user=Huy password=huydoi1955 dbname=Golang sslmode=disable
+  dir: migrations
+  table: migrations
