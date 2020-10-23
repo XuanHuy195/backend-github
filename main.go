@@ -13,7 +13,7 @@ func main() {
 		Host:     "localhost",
 		Port:     5432,
 		UserName: "Huy",
-		Password: "huydoi1955",
+		Password: "postgres",
 		DbName:   "Golang",
 	}
 	sql.Connect()
