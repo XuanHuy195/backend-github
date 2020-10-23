@@ -1,35 +1,38 @@
 package handler
 
 import (
+	"backend-github-trending/banana"
 	"backend-github-trending/model"
 	req "backend-github-trending/model/req"
 	"backend-github-trending/repository"
 	"backend-github-trending/security"
+	"github.com/dgrijalva/jwt-go"
 	validator "github.com/go-playground/validator/v10"
 	uuid "github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"net/http"
 )
+
 type UserHandler struct {
 	UserRepo repository.UserRepo
 }
 
 func (u *UserHandler) HandleSignUp(c echo.Context) error {
 	req := req.RequestSignUp{}
-	if err:= c.Bind(&req); err != nil {
+	if err := c.Bind(&req); err != nil {
 		return c.JSON(http.StatusBadRequest, model.Response{
 			StatusCode: http.StatusBadRequest,
-			Message: err.Error(),
-			Data: nil,
+			Message:    err.Error(),
+			Data:       nil,
 		})
 	}
 	validate := validator.New()
 
-	if err := validate.Struct(req); err!= nil {
+	if err := validate.Struct(req); err != nil {
 		return c.JSON(http.StatusBadRequest, model.Response{
 			StatusCode: http.StatusBadRequest,
-			Message: err.Error(),
-			Data: nil,
+			Message:    err.Error(),
+			Data:       nil,
 		})
 	}
 
@@ -37,20 +40,20 @@ func (u *UserHandler) HandleSignUp(c echo.Context) error {
 	role := model.MEMBER.String()
 
 	userId, err := uuid.NewUUID()
-	if err != nil{
+	if err != nil {
 		return c.JSON(http.StatusForbidden, model.Response{
 			StatusCode: http.StatusForbidden,
-			Message: err.Error(),
-			Data: nil,
+			Message:    err.Error(),
+			Data:       nil,
 		})
 	}
 	user := model.User{
-		UserId:    userId.String(),
-		FullName:  req.FullName,
-		Email:     req.Email,
-		Password:  hash,
-		Role:      role,
-		Token:     "",
+		UserId:   userId.String(),
+		FullName: req.FullName,
+		Email:    req.Email,
+		Password: hash,
+		Role:     role,
+		Token:    "",
 	}
 
 	user, err = u.UserRepo.SaveUser(c.Request().Context(), user)
@@ -61,7 +64,19 @@ func (u *UserHandler) HandleSignUp(c echo.Context) error {
 			Data:       nil,
 		})
 	}
-    user.Password= ""
+	//gen token
+	token, err := security.GenToken(user)
+	if err != nil {
+		//log error
+		return c.JSON(http.StatusInternalServerError, model.Response{
+			StatusCode: http.StatusInternalServerError,
+			Message:    err.Error(),
+			Data:       nil,
+		})
+	}
+	user.Token = token
+
+	user.Password = ""
 	return c.JSON(http.StatusOK, model.Response{
 		StatusCode: http.StatusOK,
 		Message:    "Xử lý thành công",
@@ -69,8 +84,129 @@ func (u *UserHandler) HandleSignUp(c echo.Context) error {
 	})
 }
 func (u *UserHandler) HandleSignIn(c echo.Context) error {
-	return c.JSON(http.StatusOK, echo.Map{
-		"user": "Huy",
-		"email": "huy@gmail.com",
+	req := req.RequestSignIn{}
+
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, model.Response{
+			StatusCode: http.StatusBadRequest,
+			Message:    err.Error(),
+			Data:       nil,
+		})
+	}
+	validate := validator.New()
+
+	if err := validate.Struct(req); err != nil {
+		return c.JSON(http.StatusBadRequest, model.Response{
+			StatusCode: http.StatusBadRequest,
+			Message:    err.Error(),
+			Data:       nil,
+		})
+	}
+
+	user, err := u.UserRepo.CheckLogin(c.Request().Context(), req)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, model.Response{
+			StatusCode: http.StatusUnauthorized,
+			Message:    err.Error(),
+			Data:       nil,
+		})
+	}
+	/// check pass
+
+	isTheSame := security.ComparePasswords(user.Password, []byte(req.Password))
+	if !isTheSame {
+		return c.JSON(http.StatusUnauthorized, model.Response{
+			StatusCode: http.StatusUnauthorized,
+			Message:    "Đăng nhập thất bại",
+			Data:       nil,
+		})
+	}
+	//gen token
+	token, err := security.GenToken(user)
+	if err != nil {
+		//log error
+		return c.JSON(http.StatusInternalServerError, model.Response{
+			StatusCode: http.StatusInternalServerError,
+			Message:    err.Error(),
+			Data:       nil,
+		})
+	}
+	user.Token = token
+
+	user.Password = ""
+	return c.JSON(http.StatusOK, model.Response{
+		StatusCode: http.StatusOK,
+		Message:    "Xử lý thành công",
+		Data:       user,
+	})
+}
+
+func (u *UserHandler) Profile(c echo.Context) error {
+	tokenData := c.Get("user").(*jwt.Token)
+	claims := tokenData.Claims.(*model.JWTCustomClaims)
+
+	user, err := u.UserRepo.SelectUserById(c.Request().Context(), claims.UserId)
+	if err != nil {
+		if err == banana.UserNotFound {
+			return c.JSON(http.StatusNotFound, model.Response{
+				StatusCode: http.StatusNotFound,
+				Message:    err.Error(),
+				Data:       nil,
+			})
+		}
+		return c.JSON(http.StatusInternalServerError, model.Response{
+			StatusCode: http.StatusInternalServerError,
+			Message:    err.Error(),
+			Data:       nil,
+		})
+	}
+	return c.JSON(http.StatusOK, model.Response{
+		StatusCode: http.StatusOK,
+		Message:    "Xử lý thành công",
+		Data:       user,
+	})
+
+}
+func (u *UserHandler) UpdateProfile(c echo.Context) error {
+	req := req.RequestUpdateUser{}
+
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, model.Response{
+			StatusCode: http.StatusBadRequest,
+			Message:    err.Error(),
+			Data:       nil,
+		})
+	}
+	//valid
+	validate := validator.New()
+	err := validate.Struct(req)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, model.Response{
+			StatusCode: http.StatusBadRequest,
+			Message:    err.Error(),
+			Data:       nil,
+		})
+	}
+
+	token := c.Get("user").(*jwt.Token)
+	claims := token.Claims.(*model.JWTCustomClaims)
+	user := model.User {
+		UserId: claims.UserId,
+		FullName: req.FullName,
+		Email: req.Email,
+	}
+	user, err = u.UserRepo.UpdateUser(c.Request().Context(), user)
+
+	if err != nil {
+		return c.JSON(http.StatusUnprocessableEntity, model.Response{
+			StatusCode: http.StatusUnprocessableEntity,
+			Message:    err.Error(),
+			Data:       nil,
+		})
+	}
+	return c.JSON(http.StatusCreated, model.Response{
+		StatusCode: http.StatusCreated,
+		Message:    "Cập nhật thành công",
+		Data:       user,
 	})
 }

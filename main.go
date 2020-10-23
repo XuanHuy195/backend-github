@@ -9,12 +9,12 @@ import (
 )
 
 func main() {
-	sql:= &db.Sql{
-		Host: "localhost",
-		Port: 5432,
+	sql := &db.Sql{
+		Host:     "localhost",
+		Port:     5432,
 		UserName: "Huy",
 		Password: "huydoi1955",
-		DbName: "Golang",
+		DbName:   "Golang",
 	}
 	sql.Connect()
 
@@ -26,7 +26,7 @@ func main() {
 	}
 
 	api := router.Api{
-		Echo: e,
+		Echo:        e,
 		UserHandler: userHandler,
 	}
 	api.SetupRouter()
